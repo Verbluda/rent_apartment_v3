@@ -1,0 +1,27 @@
+version: "3.9"
+
+services:
+  apartment_db:
+    container_name: apartment_db
+    image: postgres
+    restart: always
+    environment:
+      - POSTGRES_DB=apartment_db
+      - POSTGRES_USER=lucy
+      - POSTGRES_PASSWORD=3546
+    volumes:
+      - db:/var/lib/postgresql/data postgres
+    ports:
+      - "5436:5432"
+
+  pgadmin:
+    container_name: pgadmin
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: violentvioletlucy@yandex.ru
+      PGADMIN_DEFAULT_PASSWORD: 3546
+    ports:
+      - "5050:80"
+
+volumes:
+  db:
