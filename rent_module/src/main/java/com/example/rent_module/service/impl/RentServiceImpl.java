@@ -1,5 +1,6 @@
 package com.example.rent_module.service.impl;
 
+import com.example.rent_module.exception.AddressException;
 import com.example.rent_module.exception.ApartmentException;
 import com.example.rent_module.mapper.RentMapper;
 import com.example.rent_module.model.dto.ApartmentRequestDto;
@@ -13,11 +14,13 @@ import com.example.rent_module.repository.AddressRepository;
 import com.example.rent_module.repository.ApartmentRepository;
 import com.example.rent_module.repository.BookingRepository;
 import com.example.rent_module.service.IntegrationService;
+import com.example.rent_module.service.KafkaService;
 import com.example.rent_module.service.RentService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -37,6 +40,7 @@ public class RentServiceImpl implements RentService {
     private final BookingRepository bookingRepository;
     private final RentMapper rentMapper;
     private final IntegrationService integrationService;
+    private final KafkaService kafkaService;
 
     private Logger log = LoggerFactory.getLogger(RentServiceImpl.class);
     public static final String SUCCESSFUL_REGISTRATION_APARTMENT_MESSAGE = "Apartment is successfully registered";
@@ -87,8 +91,8 @@ public class RentServiceImpl implements RentService {
             log.info("RentServiceImpl.findApartmentByLocation -> GEO latitude {}, longitude {}", latitude, longitude);
             GeoCoderResponseDto apartmentByLocation = integrationService.findApartmentByLocation(latitude, longitude);
             log.info("RentServiceImpl.findApartmentByLocation <- GEO result GeoCoderResponseDto not null: {}", isNull(apartmentByLocation));
-            List<AddressEntity> addressList = addressRepository.findByCity(checkGeoResponse(apartmentByLocation));
-            if (addressList.isEmpty()) throw new RuntimeException();
+            List<AddressEntity> addressList = addressRepository.findByCity(checkGeoResponse(apartmentByLocation))
+                    .orElseThrow(() -> new AddressException("Не найдены квартиры", 404));
             return addressList.stream()
                     .map(x -> {
                         try {
@@ -106,7 +110,8 @@ public class RentServiceImpl implements RentService {
     }
 
     public String checkGeoResponse(GeoCoderResponseDto geoCoderResponseDto) {
-        return geoCoderResponseDto.getResultsElemList().get(0).getComponentsObject().getNormalizedCity();
+        return geoCoderResponseDto.getResultsElemList().get(0).getComponentsObject().getCity();
+        //todo 1) проверка на null 2) иерархия значения городов
     }
 
     @Override
@@ -129,6 +134,8 @@ public class RentServiceImpl implements RentService {
         BookingInfoEntity bookingInfo = rentMapper.prepareBookingInfoEntityFromParams(startDate, endDate, apartment, user);
         bookingRepository.save(bookingInfo);
 
+        BookingInfoResponseToProductModuleDto request = new BookingInfoResponseToProductModuleDto();
+
         try {
             ApartmentResponseDto apartmentResponseDto = rentMapper.apartmentEntityToApartmentResponseDto(apartment);
             apartmentResponseDto.setPhoto(null);
@@ -136,10 +143,10 @@ public class RentServiceImpl implements RentService {
 
             UserResponseDto userResponseDto = rentMapper.userEntityToUserResponseDto(user);
 
-            BookingInfoResponseToProductModuleDto response = rentMapper.createResponseToProductModuleDto(startDate, endDate, userResponseDto, apartmentResponseDto);
+            request = rentMapper.createResponseToProductModuleDto(startDate, endDate, userResponseDto, apartmentResponseDto);
             //пока не заполняется стоимость, надо считать количество дней и умножать на цену за сутки, это афтермэппинг?
-            log.info("RentServiceImpl.bookApartment -> integrationService BookingInfoResponseToProductModuleDto {}", response);
-            String discountId = integrationService.findDiscountForBooking(response);
+            log.info("RentServiceImpl.bookApartment -> integrationService BookingInfoResponseToProductModuleDto {}", request);
+            String discountId = integrationService.findDiscountForBooking(request);
             log.info("RentServiceImpl.bookApartment <- integrationService result discountId as String not null: {}", isNull(discountId));
             System.out.println("вы получаете скидку: " + discountId);
             //заполнить полученную скидку, надо передавать в ответ?
@@ -147,6 +154,10 @@ public class RentServiceImpl implements RentService {
         } catch (IOException e) {
             log.error("EXCEPTION: системная ошибка");
             throw new RuntimeException("System error, try the operation again");
+        } catch (ResourceAccessException e) {
+            log.error("EXCEPTION: микросервис продакт не доступен");
+            kafkaService.sendToTopic(request.toString());
+            throw new RuntimeException("Apartment was booked. More detailed information will be sent within the day.");
         }
         // в течение суток вышлем инфу
     }

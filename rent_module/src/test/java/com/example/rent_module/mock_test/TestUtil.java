@@ -10,7 +10,7 @@ import java.util.List;
 public class TestUtil {
 
     public static GeoCoderResponseDto getGeoCoderResultForTest() {
-        ComponentsObject componentsObject = new ComponentsObject(null, "Воркута", null);
+        ComponentsObject componentsObject = new ComponentsObject("Воркута", "Воркута");
         ResultsElem resultsElem = new ResultsElem(componentsObject);
         List<ResultsElem> resultsElemList = new ArrayList<>();
         resultsElemList.add(resultsElem);

@@ -2,6 +2,7 @@ package com.example.rent_module.mock_test;
 
 import com.example.rent_module.service.IntegrationService;
 import com.example.rent_module.service.impl.RentServiceImpl;
+import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,18 +37,23 @@ public class IntegrationTest {
     @Autowired
     private RentServiceImpl rentServiceImpl;
 
+    @Test
     public void findApartmentByLocationTest() throws Exception {
         Mockito.when(integrationService.findApartmentByLocation(anyString(), anyString())).thenReturn(TestUtil.getGeoCoderResultForTest());
         mockMvc.perform(MockMvcRequestBuilders.get(FIND_APARTMENT_BY_LOCATION)
                 .param(LATITUDE, VALUE)
                 .param(LONGITUDE, VALUE)
-                .characterEncoding("UTF-8")
+//                .characterEncoding("UTF-8")
 //                .header("auth-token", TOKEN)
                 .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(MockMvcResultMatchers.status().isOk());
     }
 
+    @Test
     public void checkGeoTest() {
         String s = rentServiceImpl.checkGeoResponse(TestUtil.getGeoCoderResultForTest());
     }
+
+    @Test
+    public void test() {}
 }
